@@ -1,3 +1,5 @@
+#include "Enes100.h"
+
 // --- Pin Definitions ---
 // First H-Bridge (Motors A & B)
 #define IN1_1 31
@@ -14,6 +16,17 @@
 #define IN4_2 49
 #define ENA_2 6
 #define ENB_2 7
+
+#define S0 12
+#define S1 13
+#define S2 9
+#define S3 11
+#define OUT 10
+
+// Variables to store the frequency readings for each color
+int redFrequency = 0;
+int greenFrequency = 0;
+int blueFrequency = 0;
 
 // --- Global Variables ---
 int motorSpeed = 200; // PWM speed value (0–255)
@@ -59,6 +72,21 @@ void setup() {
   pinMode(ENA_2, OUTPUT);
   pinMode(ENB_2, OUTPUT);
 
+    pinMode(S0, OUTPUT);
+  pinMode(S1, OUTPUT);
+  pinMode(S2, OUTPUT);
+  pinMode(S3, OUTPUT);
+  // Set the output pin as an input
+  pinMode(OUT, INPUT);
+
+  // Set the frequency scaling to 20% (common for Arduino)
+  digitalWrite(S0, HIGH);
+  digitalWrite(S1, LOW);
+
+  // Initialize serial communication
+  Serial.begin(9600);
+  Serial.println("TCS3200 Color Sensor Test");
+
   Serial.println("Motor Test Mode Active");
   Serial.println("Press 1–4 to test each wheel");
   Serial.println("1 = Front Left | 2 = Front Right | 3 = Rear Left | 4 = Rear Right");
@@ -72,14 +100,17 @@ void loop() {
   if(stop == 1){
 
     moveForward(255);
-    delay(3000);
+    delay(2000);
     turnRight(200);
-    delay(3000);
+    delay(2800);
     moveForward(200);
     delay(2000);
     stopMotors();
   }
   stop = 0;
+
+  colorSensor(10);
+  
   if (Serial.available()) {
     char key = Serial.read();
     key = toupper(key); // normalize input
@@ -202,4 +233,43 @@ void testMotor(char key) {
     case 'S': stopMotors(); break;
     default: break;
   }
+}
+
+void colorSensor(int readings){
+
+  for(int i = 0; i < readings; i++){
+
+    digitalWrite(S2, LOW);
+    digitalWrite(S3, LOW);
+    redFrequency = pulseIn(OUT, LOW); // Measure the low pulse width
+
+    // Read Blue color frequency
+    digitalWrite(S2, LOW);
+    digitalWrite(S3, HIGH);
+    blueFrequency = pulseIn(OUT, LOW);
+
+    // Read Green color frequency
+    digitalWrite(S2, HIGH);
+    digitalWrite(S3, HIGH);
+    greenFrequency = pulseIn(OUT, LOW);
+
+    // Print the frequencies to the Serial Monitor
+    Serial.print("Red: ");
+    Serial.print(redFrequency);
+    Serial.print(" | Green: ");
+    Serial.print(greenFrequency);
+    Serial.print(" | Blue: ");
+    Serial.println(blueFrequency);
+
+    if(redFrequency < 200 || blueFrequency < 200 || greenFrequency < 200){
+      Serial.println("Pollutants are present");
+      Enes100.println("Pollutants are present")
+    }
+    else{
+      Serial.println("Pollutants are not present");
+      Enes100.println("Pollutants are not present");
+    }
+
+  }
+  
 }
