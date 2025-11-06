@@ -9,9 +9,9 @@ const float SEG2_M = 0.80f;   // straight #2
 const float SEG3_M = 1.00f;   // straight #3
 
 // Turn directions: +90 = left (CCW), -90 = right (CW)
-const float TURN1_DEG = -90.0f; // after straight #1
-const float TURN2_DEG = +90.0f; // after straight #2
-const float TURN3_DEG = -90.0f; // after straight #3
+const float TURN1_DEG = +90.0f; // after straight #1
+const float TURN2_DEG = -90.0f; // immediately after TURN1
+const float TURN3_DEG = -90.0f; // immediately after TURN2
 
 // Motor PWMs (0..255); NO REVERSING is used.
 const int FWD_PWM  = 160;    // straight speed
@@ -21,8 +21,8 @@ const int TURN_PWM = 180;    // pivot speed
 const float TURN_TOL_DEG = 4.0f;
 
 // Stop/pause timing
-const int STOP_BEFORE_TURN_MS = 400;
-const int STOP_AFTER_TURN_MS  = 300;
+const int STOP_BEFORE_TURN_MS = 400;  // before the first turn after straight #1
+const int STOP_AFTER_TURN_MS  = 300;  // between consecutive turns
 // ===============================================
 
 // --------- helpers (no math.h) ----------
@@ -79,22 +79,23 @@ bool turn_step(){
 
   // Pivot in place WITHOUT reverse: stop one side, push the other
   if (e > 0){
-    // need to rotate left (CCW)
+    // rotate left (CCW)
     setMotorsForward(0, TURN_PWM);
   } else {
-    // need to rotate right (CW)
+    // rotate right (CW)
     setMotorsForward(TURN_PWM, 0);
   }
   return false;
 }
 
 // --------- simple state machine (no enum) ----------
+// New sequence: Straight1 -> Turn1 -> Turn2 -> Turn3 -> Straight2 -> Straight3 -> Done
 #define S_STRAIGHT1   0
 #define S_TURN1       1
-#define S_STRAIGHT2   2
-#define S_TURN2       3
-#define S_STRAIGHT3   4
-#define S_TURN3       5
+#define S_TURN2       2
+#define S_TURN3       3
+#define S_STRAIGHT2   4
+#define S_STRAIGHT3   5
 #define S_DONE        6
 
 int state = S_STRAIGHT1;
@@ -102,10 +103,8 @@ int state = S_STRAIGHT1;
 void setup(){
   Enes100.begin("Simulator", FIRE, 3, 1116, 8, 9);
   Tank.begin();
-  Enes100.println("Straight + three 90-degree turns (no reverse, no math.h)");
-
-  // Init first straight segment
-  dist_begin();
+  Enes100.println("Straight + three consecutive 90-degree turns (no reverse, no math.h)");
+  dist_begin(); // init first straight segment
 }
 
 void loop(){
@@ -122,9 +121,25 @@ void loop(){
 
     case S_TURN1:
       if (turn_step()){
-        delay(STOP_AFTER_TURN_MS);
+        delay(STOP_AFTER_TURN_MS);         // pause briefly
+        turn_begin(TURN2_DEG);             // immediately start next turn
+        state = S_TURN2;
+      }
+      break;
+
+    case S_TURN2:
+      if (turn_step()){
+        delay(STOP_AFTER_TURN_MS);         // pause briefly
+        turn_begin(TURN3_DEG);             // immediately start next turn
+        state = S_TURN3;
+      }
+      break;
+
+    case S_TURN3:
+      if (turn_step()){
+        delay(STOP_AFTER_TURN_MS);         // short settle before resuming forward
         dist_begin();
-        state = S_STRAIGHT2;
+        state = S_STRAIGHT2;               // proceed with remaining straights
       }
       break;
 
@@ -132,15 +147,7 @@ void loop(){
       setMotorsForward(FWD_PWM, FWD_PWM);
       if (dist_reached(SEG2_M)){
         stopMotors();
-        delay(STOP_BEFORE_TURN_MS);
-        turn_begin(TURN2_DEG);
-        state = S_TURN2;
-      }
-      break;
-
-    case S_TURN2:
-      if (turn_step()){
-        delay(STOP_AFTER_TURN_MS);
+        delay(200);
         dist_begin();
         state = S_STRAIGHT3;
       }
@@ -149,15 +156,6 @@ void loop(){
     case S_STRAIGHT3:
       setMotorsForward(FWD_PWM, FWD_PWM);
       if (dist_reached(SEG3_M)){
-        stopMotors();
-        delay(STOP_BEFORE_TURN_MS);
-        turn_begin(TURN3_DEG);
-        state = S_TURN3;
-      }
-      break;
-
-    case S_TURN3:
-      if (turn_step()){
         stopMotors();
         Enes100.println("Sequence complete.");
         state = S_DONE;
