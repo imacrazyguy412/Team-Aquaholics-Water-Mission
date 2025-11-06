@@ -23,6 +23,9 @@
 #define S3 11
 #define OUT 10
 
+#define trigPin 27
+#define echoPin 29
+
 // Variables to store the frequency readings for each color
 int redFrequency = 0;
 int greenFrequency = 0;
@@ -55,8 +58,13 @@ int stop;
 
 // --- Setup ---
 void setup() {
-  Serial.begin(9600);
-
+  /*
+  Enes100.begin("Aquaholics", WATER, 522, 1116, 50, 51);
+  delay(1000);
+  Enes100.println(Enes100.isConnected());
+  Enes100.println("Hello world");
+  
+  */
   // Motor pins
   pinMode(IN1_1, OUTPUT);
   pinMode(IN2_1, OUTPUT);
@@ -72,7 +80,7 @@ void setup() {
   pinMode(ENA_2, OUTPUT);
   pinMode(ENB_2, OUTPUT);
 
-    pinMode(S0, OUTPUT);
+  pinMode(S0, OUTPUT);
   pinMode(S1, OUTPUT);
   pinMode(S2, OUTPUT);
   pinMode(S3, OUTPUT);
@@ -83,39 +91,66 @@ void setup() {
   digitalWrite(S0, HIGH);
   digitalWrite(S1, LOW);
 
-  // Initialize serial communication
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
   Serial.begin(9600);
-  Serial.println("TCS3200 Color Sensor Test");
 
-  Serial.println("Motor Test Mode Active");
-  Serial.println("Press 1–4 to test each wheel");
-  Serial.println("1 = Front Left | 2 = Front Right | 3 = Rear Left | 4 = Rear Right");
+  // Initialize serial communication
+  //Serial.println("TCS3200 Color Sensor Test");
 
+  //Serial.println("Motor Test Mode Active");
+  //Serial.println("Press 1–4 to test each wheel");
+  //Serial.println("1 = Front Left | 2 = Front Right | 3 = Rear Left | 4 = Rear Right");
+  
   stop = 1;
+
 }
 
 // --- Main Loop ---
 void loop() {
-
+  
+  int distanceMM = readDistanceMM();
+  
+  Serial.print("Distance: ");
+  Serial.print(distanceMM);
+  Serial.println(" mm");
+  
+  delay(500); 
+  
+  
+  
+  /*
   if(stop == 1){
 
     moveForward(255);
-    delay(2000);
-    turnRight(200);
-    delay(2800);
-    moveForward(200);
-    delay(2000);
+    delay(25000);
+    
     stopMotors();
   }
   stop = 0;
+  
+  
+  Enes100.println(Enes100.getX());
+  delay(200);
+  Enes100.println(Enes100.getY());
+  delay(200);
+  Enes100.println(Enes100.getTheta());
+  delay(200);
+  Enes100.println(Enes100.isVisible());
+  delay(200);
 
-  colorSensor(10);
+
+  /*
+  colorSensor(1);
+  delay(500);
+  */
+  /*
   
   if (Serial.available()) {
     char key = Serial.read();
     key = toupper(key); // normalize input
     testMotor(key);
-  }
+  }*/
 }
 
 // --- Motor Control Functions ---
@@ -261,15 +296,39 @@ void colorSensor(int readings){
     Serial.print(" | Blue: ");
     Serial.println(blueFrequency);
 
-    if(redFrequency < 200 || blueFrequency < 200 || greenFrequency < 200){
+    if(redFrequency < 700 || blueFrequency < 200 || greenFrequency < 200){
       Serial.println("Pollutants are present");
-      Enes100.println("Pollutants are present")
+     // Enes100.println("Pollutants are present");
+     // Enes100.mission(WATER_TYPE, FRESH_POLLUTED);
     }
     else{
       Serial.println("Pollutants are not present");
-      Enes100.println("Pollutants are not present");
+     // Enes100.println("Pollutants are not present");
+     // Enes100.mission(WATER_TYPE, FRESH_UNPOLLUTED);
+
     }
 
   }
   
+}
+
+int readDistanceMM() {
+  long duration;
+  int distanceMM;
+
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+  
+  duration = pulseIn(echoPin, HIGH);
+  
+  // Speed of sound is approx. 0.343 mm/uS.
+  // Distance = (duration * speed of sound) / 2 (for one-way trip)
+  // 0.343 / 2 approx 0.1715
+  distanceMM = duration * 0.1715; 
+  
+  return distanceMM;
 }
