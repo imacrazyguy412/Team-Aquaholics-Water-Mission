@@ -1,4 +1,6 @@
 #include "Enes100.h"
+#include <Stepper.h>
+
 
 // --- Pin Definitions ---
 // First H-Bridge (Motors A & B)
@@ -17,14 +19,38 @@
 #define ENA_2 6
 #define ENB_2 7
 
-#define S0 12
-#define S1 13
+//color sensor
+#define S0 4
+#define S1 5
 #define S2 9
-#define S3 11
-#define OUT 10
+#define S3 10
+#define OUT 8
 
-#define trigPin 27
-#define echoPin 29
+//wifi module
+#define TX 50
+#define RX 51
+
+//distance ultrasonic sensor
+#define trigPinDistance 27
+#define echoPinDistance 29
+
+//depth ultrasonic sensor
+#define trigPinDepth 13
+#define echoPinDepth 12
+
+//navigation system
+#define upTheta 0.05
+#define downTheta -3.1
+#define rightTheta -1.46
+#define leftTheta 1.56
+#define missionStart1 0.5
+#define missionStart2 1.5
+
+//stepper motor
+#define IN1 25
+#define IN2 23
+#define IN3 24
+#define IN4 22
 
 // Variables to store the frequency readings for each color
 int redFrequency = 0;
@@ -52,19 +78,26 @@ void rearRightBackward(int speedVal);
 void turnLeft(int speedVal);
 void turnRight(int speedVal);
 
+void turnToAngle(int speedVal, float targetAngle);
+
+void moveUp(int speedVal);
+void moveDown(int speedVal);
+void moveRight(int speedVal);
+void moveLeft(int speedVal);
+
+void navigateToMission(int speedVal);
+
 void testMotor(char key);
 
 int stop;
 
 // --- Setup ---
 void setup() {
-  /*
-  Enes100.begin("Aquaholics", WATER, 522, 1116, 50, 51);
+  
+  Enes100.begin("Aquaholics", WATER, 85, 1116, TX, RX);
   delay(1000);
   Enes100.println(Enes100.isConnected());
-  Enes100.println("Hello world");
   
-  */
   // Motor pins
   pinMode(IN1_1, OUTPUT);
   pinMode(IN2_1, OUTPUT);
@@ -91,17 +124,9 @@ void setup() {
   digitalWrite(S0, HIGH);
   digitalWrite(S1, LOW);
 
-  pinMode(trigPin, OUTPUT);
-  pinMode(echoPin, INPUT);
-  Serial.begin(9600);
+  pinMode(trigPinDistance, OUTPUT);
+  pinMode(echoPinDistance, INPUT);
 
-  // Initialize serial communication
-  //Serial.println("TCS3200 Color Sensor Test");
-
-  //Serial.println("Motor Test Mode Active");
-  //Serial.println("Press 1–4 to test each wheel");
-  //Serial.println("1 = Front Left | 2 = Front Right | 3 = Rear Left | 4 = Rear Right");
-  
   stop = 1;
 
 }
@@ -109,48 +134,95 @@ void setup() {
 // --- Main Loop ---
 void loop() {
   
-  int distanceMM = readDistanceMM();
-  
-  Serial.print("Distance: ");
-  Serial.print(distanceMM);
-  Serial.println(" mm");
-  
-  delay(500); 
-  
-  
-  
-  /*
   if(stop == 1){
+    navigateToMission(200);
+    navigateObstacles(200);
+  }
 
-    moveForward(255);
-    delay(25000);
+
+  stop = 0;
+}
+
+
+void navigateToMission(int speedVal){
+
+  if(Enes100.getY() < 1){ //bottom of arena start
+
+    turnToAngle(speedVal, 0);
     
     stopMotors();
+    delay(1000);
+
+    while(Enes100.getY() < 1.5){
+      moveForward(speedVal);
+    }
+
   }
-  stop = 0;
-  
-  
-  Enes100.println(Enes100.getX());
-  delay(200);
-  Enes100.println(Enes100.getY());
-  delay(200);
-  Enes100.println(Enes100.getTheta());
-  delay(200);
-  Enes100.println(Enes100.isVisible());
-  delay(200);
+  else{//top of arena start
+
+    turnToAngle(speedVal, PI);
+
+    stopMotors();
+    delay(1000);
+
+    while(Enes100.getY() > 0.5){
+      moveForward(speedVal);
+    }
+  }
+
+  stopMotors();
+}
 
 
-  /*
-  colorSensor(1);
-  delay(500);
-  */
-  /*
-  
-  if (Serial.available()) {
-    char key = Serial.read();
-    key = toupper(key); // normalize input
-    testMotor(key);
-  }*/
+void navigateObstacles(int speedVal){
+
+  turnToAngle(speedVal, -PI/2 - 0.2);
+
+  while(Enes100.getX() < 0.9){
+    moveForward(speedVal);
+  }
+
+  int distanceFromObstacle = averageDistanceReading(27, 29);
+
+  if(distanceFromObstacle > 45){
+    
+    while(Enes100.getX() < 1.8){
+      moveForward(speedVal);
+    }
+  }
+  else if (Enes100.getY() > 1){
+
+    turnToAngle(speedVal, -PI);
+
+    while(Enes100.getY() > 1){
+      moveForward(speedVal);
+    }
+
+    turnToAngle(speedVal, -PI/2);
+
+    int distanceFromObstacle = averageDistanceReading(27, 29);
+
+    if(distanceFromObstacle > 45){
+        
+      while(Enes100.getX() < 1.8){
+        moveForward(speedVal);
+      }
+    }
+    else{
+      
+      turnToAngle(speedVal, -PI);
+
+      while(Enes100.getY() > 0.5){
+        moveForward(speedVal);
+      }
+
+      turnToAngle(speedVal, -PI/2);
+
+      while(Enes100.getX() < 1.8){
+        moveForward(speedVal);
+      }
+    }
+  }
 }
 
 // --- Motor Control Functions ---
@@ -256,6 +328,97 @@ void turnLeft(int speedVal) {
   rearLeftBackward(speedVal);
 }
 
+void turnToAngle(int speedVal, float targetAngle) {
+  // Normalize target angle to [-PI, PI]
+  if (targetAngle > PI) targetAngle -= 2 * PI;
+  if (targetAngle < -PI) targetAngle += 2 * PI;
+
+  // Get initial angle (retry if invalid) - Good as is
+  float currentAngle = Enes100.getTheta();
+  while (currentAngle == -1) {
+    currentAngle = Enes100.getTheta();
+    delay(5);
+  }
+
+  // Safety timer and parameters
+  unsigned long startTime = millis();
+  const unsigned long TIMEOUT = 8000; // stop turning after 8 seconds
+  const float tolerance = 0.03; // radians (~5 degrees)
+
+  // --- NEW: Proportional Control Constants ---
+  const float Kp = speedVal / PI; // A basic proportionality constant: Full speed at PI error, 0 speed at 0 error
+  const int MIN_SPEED = 80;       // Minimum motor speed to ensure movement
+  // ------------------------------------------
+
+  // Start turning loop
+  while (true) {
+    currentAngle = Enes100.getTheta();
+    if (currentAngle == -1) {
+      delay(5);
+      continue; // skip invalid readings
+    }
+
+    // Compute shortest angular difference (ERROR)
+    float error = targetAngle - currentAngle;
+    if (error > PI) error -= 2 * PI;
+    if (error < -PI) error += 2 * PI;
+
+    // 1. Check if we've reached the target (stopping condition remains the same)
+    if (abs(error) < tolerance) {
+      stopMotors();
+      break;
+    }
+
+    // 2. Safety timeout
+    if (millis() - startTime > TIMEOUT) {
+      stopMotors();
+      break;
+    }
+
+    // --- CRITICAL CHANGE: Proportional Control Implementation ---
+
+    // Calculate the required speed based on the error
+    // The magnitude of the speed is proportional to the magnitude of the error.
+    int proportionalSpeed = abs(error) * Kp;
+
+    // Limit the calculated speed between a minimum and the initial speedVal
+    int motorSpeed = constrain(proportionalSpeed, MIN_SPEED, speedVal);
+
+    // 3. Continuously choose direction and apply the calculated speed
+    if (error > 0) {
+      // Turn left (positive error) with the proportional speed
+      turnLeft(motorSpeed);
+    } else { // error < 0
+      // Turn right (negative error) with the proportional speed
+      turnRight(motorSpeed);
+    }
+
+    // Delay between readings to prevent over-rapid looping
+    delay(5);
+  }
+}
+
+void moveUp(int speedVal){
+  turnToAngle(speedVal, 0);
+  moveForward(speedVal);
+}
+
+void moveDown(int speedVal){
+  turnToAngle(speedVal, PI);
+  moveForward(speedVal);
+}
+
+void moveLeft(int speedVal){
+  turnToAngle(speedVal, -PI/2);
+  moveForward(speedVal);
+}
+
+void moveRight(int speedVal){
+  turnToAngle(speedVal, PI/2);
+  moveForward(speedVal);
+}
+
+
 // --- Keyboard Testing Function ---
 void testMotor(char key) {
   switch (key) {
@@ -312,7 +475,7 @@ void colorSensor(int readings){
   
 }
 
-int readDistanceMM() {
+int readDistanceMM(int trigPin, int echoPin) {
   long duration;
   int distanceMM;
 
@@ -331,4 +494,38 @@ int readDistanceMM() {
   distanceMM = duration * 0.1715; 
   
   return distanceMM;
+}
+
+int averageDistanceReading(int trigPin, int echoPin) {
+  const int NUM_READINGS = 20;
+  const int OUTLIERS_TO_DISCARD = 2;
+  const int VALID_READINGS = NUM_READINGS - (2 * OUTLIERS_TO_DISCARD);
+  const int DELAY_MS = 200;
+  
+  int readings[NUM_READINGS];
+  
+  for (int i = 0; i < NUM_READINGS; i++) {
+    readings[i] = readDistanceMM(trigPin, echoPin);
+    delay(DELAY_MS);
+  }
+  
+  for (int i = 0; i < NUM_READINGS - 1; i++) {
+    for (int j = 0; j < NUM_READINGS - i - 1; j++) {
+      if (readings[j] > readings[j + 1]) {
+        int temp = readings[j];
+        readings[j] = readings[j + 1];
+        readings[j + 1] = temp;
+      }
+    }
+  }
+  
+  long sum = 0;
+  
+  for (int i = OUTLIERS_TO_DISCARD; i < NUM_READINGS - OUTLIERS_TO_DISCARD; i++) {
+    sum += readings[i];
+  }
+  
+  float average = (float)sum / VALID_READINGS;
+  
+  return (int)average;
 }
