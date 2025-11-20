@@ -52,6 +52,10 @@
 #define IN3 24
 #define IN4 22
 
+#define closeObstacle 1
+#define farObstacle 2
+#define noObstacle 0
+
 // Variables to store the frequency readings for each color
 int redFrequency = 0;
 int greenFrequency = 0;
@@ -89,6 +93,11 @@ void navigateToMission(int speedVal);
 
 void testMotor(char key);
 
+void turn90DegreesRight(int speedVal);
+
+void turn90DegreesLeft(int speedVal);
+
+
 int stop;
 
 // --- Setup ---
@@ -97,7 +106,7 @@ void setup() {
   Enes100.begin("Aquaholics", WATER, 85, 1116, TX, RX);
   delay(1000);
   Enes100.println(Enes100.isConnected());
-  
+  Serial.begin(9600);
   // Motor pins
   pinMode(IN1_1, OUTPUT);
   pinMode(IN2_1, OUTPUT);
@@ -127,22 +136,228 @@ void setup() {
   pinMode(trigPinDistance, OUTPUT);
   pinMode(echoPinDistance, INPUT);
 
+  pinMode(trigPinDepth, OUTPUT);
+  pinMode(echoPinDepth, INPUT);
+
   stop = 1;
 
 }
 
 // --- Main Loop ---
 void loop() {
-  
+  stop=0;
   if(stop == 1){
-    navigateToMission(200);
-    navigateObstacles(200);
+    /*
+    frontRightBackward(200);
+    rearRightForward(200);
+    rearLeftBackward(200);
+    frontLeftForward(200);
+
+    delay(5000);
+  */
+
+    //turnToAngle(200, -1.5);
+    moveForward(200);
+    delay(3200);
+
+    stopMotors();
+
+    int row1;
+    int row2;
+    int row3;
+
+    int* row1p = &row1;
+    int* row2p = &row2;
+    int* row3p = &row3;
+
+    assignObstacleRows(row1p);
+
+    turn90DegreesLeft(200);
+    moveForward(200);
+    delay(4200);
+    turn90DegreesRight(200);
+
+    assignObstacleRows(row2p);
+
+    turn90DegreesLeft(200);
+    moveForward(200);
+    delay(4400);
+    turn90DegreesRight(200);
+
+    assignObstacleRows(row3p);
+
+
+    if(row3 == farObstacle){
+      moveForward(200);
+      delay(7000);
+      turn90DegreesRight(200);
+      moveForward(200);
+
+      if(row2 == closeObstacle){
+        delay(4300);
+        turn90DegreesLeft(200);
+        moveForward(200);
+        delay(7000);
+        turn90DegreesLeft(200);
+        moveForward(200);
+        delay(5800);
+      }
+      else if(row1 == closeObstacle){
+        delay(8000);
+        turn90DegreesLeft(200);
+        moveForward(200);
+        delay(7000);
+        turn90DegreesLeft(200);
+        delay(8200);
+      }
+      turn90DegreesRight(200);
+      moveForward(200);
+      delay(14000);
+      stopMotors();
+    }
+    else if(row3 == closeObstacle){
+      moveBackward(200);
+      if(row2 == farObstacle){
+        delay(4200);
+        turn90DegreesRight(200);
+        moveForward(200);
+        delay(7000);
+        turn90DegreesLeft(200);
+        delay(4200);
+      }
+      else if(row1 == farObstacle){
+        delay(9000);
+        turn90DegreesRight(200);
+        moveForward(200);
+        delay(7000);
+        turn90DegreesLeft(200);
+        delay(8400);
+      }
+      turn90DegreesRight(200);
+      moveForward(200);
+      delay(14000);
+      stopMotors();
+    }
   }
+
+  stopMotors();
+
+  double waterDepth = 81 - readDistanceMM(trigPinDepth, echoPinDepth);
+  //Serial.print(waterDepth);
+  //Serial.println("mm");
+  if(waterDepth > 35){
+    Serial.println("Distance = 40 mm");
+  }
+  else if(waterDepth > 25 && waterDepth < 35){
+    Serial.println("Distance = 30 mm");
+  }
+  else if(waterDepth < 25){
+    Serial.println("Distance = 20 mm");
+  }
+  
+  delay(1000);
+  colorSensor(1);
+  delay(1000);
 
 
   stop = 0;
 }
 
+
+
+void assignObstacleRows(int* row){
+
+    int distance = averageDistanceReading(trigPinDistance, echoPinDistance);
+    Serial.println(distance);
+    if(distance > 20 && distance < 400){
+      *row = closeObstacle;
+      Enes100.println("close obstacle");
+    }
+    else if(distance > 500 && distance < 2000){
+      *row = farObstacle;
+      Enes100.println("far obstacle");
+
+    }
+    else{
+      *row = noObstacle;
+      Enes100.println("no obstacle");
+
+    }
+}
+
+void turn90DegreesRight(int speedVal) {
+   
+    const unsigned long DECAY_TIME_MS = 250; 
+    // MIN_SPEED: The lowest PWM value to use during the slowdown phase. (Must be higher than the motor stall speed)
+    const int MIN_SPEED = 80;                
+
+    unsigned long startTime = millis();
+    unsigned long endTime = startTime + 2800;
+
+    while (millis() < endTime) {
+        unsigned long currentTime = millis();
+        unsigned long timeRemaining = endTime - currentTime;
+        
+        int currentSpeed;
+        
+        if (timeRemaining > DECAY_TIME_MS) {
+            currentSpeed = speedVal;
+        } 
+        else {
+
+            long speedRange = speedVal - MIN_SPEED;
+            // Use long arithmetic to avoid overflow during multiplication
+            long calculatedSpeed = MIN_SPEED + (long)speedRange * (long)timeRemaining / DECAY_TIME_MS;
+            
+            // Ensure the speed is constrained between the set minimum and maximum
+            currentSpeed = constrain(calculatedSpeed, MIN_SPEED, speedVal);
+        }
+
+        // Apply the calculated speed, hardcoded for a RIGHT turn
+        turnRight(currentSpeed);
+        
+        // Small delay to prevent too rapid motor updates
+        delay(5); 
+    }
+    stopMotors();
+}
+
+void turn90DegreesLeft(int speedVal) {
+   
+    const unsigned long DECAY_TIME_MS = 250; 
+    // MIN_SPEED: The lowest PWM value to use during the slowdown phase. (Must be higher than the motor stall speed)
+    const int MIN_SPEED = 80;                
+
+    unsigned long startTime = millis();
+    unsigned long endTime = startTime + 2800;
+
+    while (millis() < endTime) {
+        unsigned long currentTime = millis();
+        unsigned long timeRemaining = endTime - currentTime;
+        
+        int currentSpeed;
+        
+        if (timeRemaining > DECAY_TIME_MS) {
+            currentSpeed = speedVal;
+        } 
+        else {
+
+            long speedRange = speedVal - MIN_SPEED;
+            // Use long arithmetic to avoid overflow during multiplication
+            long calculatedSpeed = MIN_SPEED + (long)speedRange * (long)timeRemaining / DECAY_TIME_MS;
+            
+            // Ensure the speed is constrained between the set minimum and maximum
+            currentSpeed = constrain(calculatedSpeed, MIN_SPEED, speedVal);
+        }
+
+        // Apply the calculated speed, hardcoded for a RIGHT turn
+        turnLeft(currentSpeed);
+        
+        // Small delay to prevent too rapid motor updates
+        delay(5); 
+    }
+    stopMotors();
+}
 
 void navigateToMission(int speedVal){
 
@@ -347,7 +562,7 @@ void turnToAngle(int speedVal, float targetAngle) {
 
   // --- NEW: Proportional Control Constants ---
   const float Kp = speedVal / PI; // A basic proportionality constant: Full speed at PI error, 0 speed at 0 error
-  const int MIN_SPEED = 80;       // Minimum motor speed to ensure movement
+  const int MIN_SPEED = 50;       // Minimum motor speed to ensure movement
   // ------------------------------------------
 
   // Start turning loop
@@ -459,7 +674,7 @@ void colorSensor(int readings){
     Serial.print(" | Blue: ");
     Serial.println(blueFrequency);
 
-    if(redFrequency < 700 || blueFrequency < 200 || greenFrequency < 200){
+    if(redFrequency < 400 || blueFrequency < 200 || greenFrequency < 200){
       Serial.println("Pollutants are present");
      // Enes100.println("Pollutants are present");
      // Enes100.mission(WATER_TYPE, FRESH_POLLUTED);
@@ -475,9 +690,9 @@ void colorSensor(int readings){
   
 }
 
-int readDistanceMM(int trigPin, int echoPin) {
+double readDistanceMM(int trigPin, int echoPin) {
   long duration;
-  int distanceMM;
+  double distanceMM;
 
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
@@ -493,39 +708,71 @@ int readDistanceMM(int trigPin, int echoPin) {
   // 0.343 / 2 approx 0.1715
   distanceMM = duration * 0.1715; 
   
+  // Added print statement for debugging the raw reading
+  Enes100.println("distancemm");
+  Enes100.println( distanceMM);
+  //Serial.println(distanceMM);
+  
   return distanceMM;
 }
 
-int averageDistanceReading(int trigPin, int echoPin) {
+double averageDistanceReading(int trigPin, int echoPin) {
+  // Constants for data collection and processing
   const int NUM_READINGS = 20;
-  const int OUTLIERS_TO_DISCARD = 2;
+  const int OUTLIERS_TO_DISCARD = 2; // Discard 2 lowest and 2 highest
   const int VALID_READINGS = NUM_READINGS - (2 * OUTLIERS_TO_DISCARD);
   const int DELAY_MS = 200;
+  const int MIN_VALID_DISTANCE_MM = 0; // Minimum distance to consider a reading valid
+
+  // Safety delay before starting (kept from your original request)
+  delay(500);
   
-  int readings[NUM_READINGS];
+  double readings[NUM_READINGS];
+  int readingIndex = 0; // Counter for valid readings collected
   
-  for (int i = 0; i < NUM_READINGS; i++) {
-    readings[i] = readDistanceMM(trigPin, echoPin);
+  // Loop until 20 valid readings are collected
+  while (readingIndex < NUM_READINGS) {
+    // Read the raw distance
+    double distance = readDistanceMM(trigPin, echoPin);
+    
+    // Check if the reading is above the unreliable threshold
+    if (distance > MIN_VALID_DISTANCE_MM) {
+      readings[readingIndex] = distance;
+      readingIndex++; // Only increment if we stored a valid reading
+    } 
+    // Wait before the next reading (wait even if the reading was discarded)
     delay(DELAY_MS);
   }
   
+  // --- Sorting (Bubble Sort) ---
+  // Sort the 20 collected valid readings in ascending order
   for (int i = 0; i < NUM_READINGS - 1; i++) {
     for (int j = 0; j < NUM_READINGS - i - 1; j++) {
       if (readings[j] > readings[j + 1]) {
-        int temp = readings[j];
+        double temp = readings[j];
         readings[j] = readings[j + 1];
         readings[j + 1] = temp;
       }
     }
   }
   
-  long sum = 0;
+  // --- Calculate Sum (Discarding Outliers) ---
+  double sum = 0;
   
+  // Sum only the middle readings (e.g., indexes 2 through 17)
   for (int i = OUTLIERS_TO_DISCARD; i < NUM_READINGS - OUTLIERS_TO_DISCARD; i++) {
     sum += readings[i];
   }
   
-  float average = (float)sum / VALID_READINGS;
+  // --- Calculate Average ---
+  double average = (double)sum / VALID_READINGS;
+  //Enes100.println("average of last 20:");
+ // Enes100.println(average);
+  //Enes100.println("printing the number 80");
+  double x = 80;
+  //Enes100.println(x);
+ // Serial.println(average);
+
   
-  return (int)average;
+  return (double)average;
 }
