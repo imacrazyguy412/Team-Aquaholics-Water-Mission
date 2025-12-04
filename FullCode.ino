@@ -56,6 +56,20 @@
 #define farObstacle 2
 #define noObstacle 0
 
+#define COMP_LESS     0
+#define COMP_GREATER  1
+
+#define DIR_FORWARD   0
+#define DIR_BACKWARD  1
+#define DIR_LEFT  2
+#define DIR_RIGHT  3
+
+const int stepsPerRev = 2048;
+
+// Use the pins you defined in the constructor
+Stepper myStepper(stepsPerRev, IN1, IN3, IN2, IN4);
+
+
 // Variables to store the frequency readings for each color
 int redFrequency = 0;
 int greenFrequency = 0;
@@ -97,13 +111,27 @@ void turn90DegreesRight(int speedVal);
 
 void turn90DegreesLeft(int speedVal);
 
+void moveLeft(int speedVal);
+void moveRight(int speedVal);
+
+double readDistanceMM(int trigPin, int echoPin);
+void colorSensor(int readings);
+double averageDistanceReading(int trigPin, int echoPin);
+void waterDepth();
+
+void assignObstacleRows(int* row);
+
+void missionStartBottom();
+void missionStartTop();
+
+void moveUntilY(double targetY, int comparison, int direction);
 
 int stop;
 
 // --- Setup ---
 void setup() {
   
-  Enes100.begin("Aquaholics", WATER, 85, 1116, TX, RX);
+  Enes100.begin("Aquaholics", WATER, 85, 1120, TX, RX);
   delay(1000);
   Enes100.println(Enes100.isConnected());
   Serial.begin(9600);
@@ -139,131 +167,198 @@ void setup() {
   pinMode(trigPinDepth, OUTPUT);
   pinMode(echoPinDepth, INPUT);
 
+  myStepper.setSpeed(10);
+
   stop = 1;
 
 }
 
 // --- Main Loop ---
 void loop() {
-  stop=0;
+
   if(stop == 1){
-    /*
-    frontRightBackward(200);
-    rearRightForward(200);
-    rearLeftBackward(200);
-    frontLeftForward(200);
 
-    delay(5000);
-  */
-
-    //turnToAngle(200, -1.5);
-    moveForward(200);
-    delay(3200);
-
-    stopMotors();
-
-    int row1;
-    int row2;
-    int row3;
-
-    int* row1p = &row1;
-    int* row2p = &row2;
-    int* row3p = &row3;
-
-    assignObstacleRows(row1p);
-
-    turn90DegreesLeft(200);
-    moveForward(200);
-    delay(4200);
-    turn90DegreesRight(200);
-
-    assignObstacleRows(row2p);
-
-    turn90DegreesLeft(200);
-    moveForward(200);
-    delay(4400);
-    turn90DegreesRight(200);
-
-    assignObstacleRows(row3p);
-
-
-    if(row3 == farObstacle){
-      moveForward(200);
-      delay(7000);
-      turn90DegreesRight(200);
-      moveForward(200);
-
-      if(row2 == closeObstacle){
-        delay(4300);
-        turn90DegreesLeft(200);
-        moveForward(200);
-        delay(7000);
-        turn90DegreesLeft(200);
-        moveForward(200);
-        delay(5800);
-      }
-      else if(row1 == closeObstacle){
-        delay(8000);
-        turn90DegreesLeft(200);
-        moveForward(200);
-        delay(7000);
-        turn90DegreesLeft(200);
-        delay(8200);
-      }
-      turn90DegreesRight(200);
-      moveForward(200);
-      delay(14000);
-      stopMotors();
+    if(Enes100.getY() < 1){
+      missionStartBottom();
     }
-    else if(row3 == closeObstacle){
-      moveBackward(200);
-      if(row2 == farObstacle){
-        delay(4200);
-        turn90DegreesRight(200);
-        moveForward(200);
-        delay(7000);
-        turn90DegreesLeft(200);
-        delay(4200);
-      }
-      else if(row1 == farObstacle){
-        delay(9000);
-        turn90DegreesRight(200);
-        moveForward(200);
-        delay(7000);
-        turn90DegreesLeft(200);
-        delay(8400);
-      }
-      turn90DegreesRight(200);
-      moveForward(200);
-      delay(14000);
-      stopMotors();
+    else{
+      missionStartTop();
     }
   }
-
+    
   stopMotors();
-
-  double waterDepth = 81 - readDistanceMM(trigPinDepth, echoPinDepth);
-  //Serial.print(waterDepth);
-  //Serial.println("mm");
-  if(waterDepth > 35){
-    Serial.println("Distance = 40 mm");
-  }
-  else if(waterDepth > 25 && waterDepth < 35){
-    Serial.println("Distance = 30 mm");
-  }
-  else if(waterDepth < 25){
-    Serial.println("Distance = 20 mm");
-  }
-  
-  delay(1000);
-  colorSensor(1);
-  delay(1000);
-
-
   stop = 0;
 }
 
 
+void missionStartBottom(){
+
+  turnToAngle(200, 0);
+
+  moveUntilY(1.53, COMP_GREATER, DIR_FORWARD);
+
+  stopMotors();
+  delay(3000);
+  waterDepth();
+  delay(1000);
+  colorSensor(1);
+  delay(1000);
+  myStepper.step(4000);
+  delay(1000);
+  myStepper.step(-4000);
+  delay(1000);
+
+  moveUntilY(0.8, COMP_LESS, DIR_BACKWARD);
+
+  turn90DegreesRight(200);
+  moveForward(200);
+
+  delay(3200);
+
+  stopMotors();
+
+  int row1;
+  int row2;
+  int row3;
+
+  int* row1p = &row1;
+  int* row2p = &row2;
+  int* row3p = &row3;
+
+  assignObstacleRows(row1p);
+
+  turn90DegreesLeft(200);
+  moveForward(200);
+  delay(4200);
+  turn90DegreesRight(200);
+
+  assignObstacleRows(row2p);
+
+  turn90DegreesLeft(200);
+  moveForward(200);
+  delay(4400);
+  turn90DegreesRight(200);
+
+  assignObstacleRows(row3p);
+
+  if(row3 == farObstacle){
+    moveForward(200);
+    delay(7150);
+    turn90DegreesRight(200);
+    moveForward(200);
+
+    if(row2 == closeObstacle){
+      delay(4500);
+      turn90DegreesLeft(200);
+      moveForward(200);
+      delay(7500);
+      turn90DegreesLeft(200);
+      moveForward(200);
+      delay(5800);
+    }
+    else if(row1 == closeObstacle){
+      delay(8300);
+      turn90DegreesLeft(200);
+      moveForward(200);
+      delay(7500);
+      turn90DegreesLeft(200);
+      moveForward(200);
+      delay(8700);
+    }
+    turn90DegreesRight(200);
+    moveForward(200);
+    delay(14000);
+    stopMotors();
+  }
+  else if(row3 == closeObstacle){
+    turn90DegreesLeft(200);
+    moveBackward(200);
+    if(row2 == farObstacle){
+      delay(4200);
+      turn90DegreesRight(200);
+      moveForward(200);
+      delay(7000);
+      turn90DegreesLeft(200);
+      moveForward(200);
+      delay(4200);
+    }
+    else if(row1 == farObstacle){
+      delay(9000);
+      turn90DegreesRight(200);
+      moveForward(200);
+      delay(7000);
+      turn90DegreesLeft(200);
+      moveForward(200);
+      delay(8400);
+    }
+    turn90DegreesRight(200);
+    moveForward(200);
+    delay(14000);
+    stopMotors();
+  }
+  
+}
+
+void missionStartTop(){
+
+  turnToAngle(200, PI);
+
+  moveUntilY(0.45, COMP_LESS, DIR_FORWARD);
+
+  stopMotors();
+  delay(3000);
+  waterDepth();
+  delay(1000);
+  colorSensor(1);
+  delay(1000);
+
+  myStepper.step(4000);
+  delay(1000);
+  myStepper.step(-4000);
+
+  moveUntilY(1.2, COMP_GREATER, DIR_BACKWARD);
+
+  turn90DegreesLeft(200);
+
+  moveUntilX(0.95);
+
+  int row1;
+  int row2;
+  int row3;
+
+  int* row1p = &row1;
+  int* row2p = &row2;
+  int* row3p = &row3;
+
+  assignObstacleRows(row3p);
+  moveUntilY(1, COMP_LESS, DIR_RIGHT);
+  assignObstacleRows(row2p);
+  moveUntilY(0.5, COMP_LESS, DIR_RIGHT);
+  assignObstacleRows(row1p);
+
+  if(row1 == farObstacle){ 
+    moveUntilX(2);
+    if(row2 == closeObstacle){
+      moveUntilY(0.9, COMP_GREATER, DIR_LEFT);
+    }
+    else if(row3 == closeObstacle){
+      moveUntilY(1.53, COMP_GREATER, DIR_LEFT);
+    }
+  }
+  else if(row1 == closeObstacle){
+    if(row2 == farObstacle){
+      moveUntilY(0.9, COMP_GREATER, DIR_LEFT);
+    }
+    else if(row3 == farObstacle){
+      moveUntilY(1.53, COMP_GREATER, DIR_LEFT);
+    }
+    moveUntilX(2);
+    moveUntilY(0.5, COMP_LESS, DIR_RIGHT); 
+  }
+  moveUntilX(3.12);
+  moveUntilY(1.53, COMP_GREATER, DIR_LEFT);
+  moveUntilX(4.02);
+}
 
 void assignObstacleRows(int* row){
 
@@ -282,6 +377,76 @@ void assignObstacleRows(int* row){
       *row = noObstacle;
       Enes100.println("no obstacle");
 
+    }
+}
+
+void moveUntilY(double targetY, int comparison, int direction) {
+    int stableCount = 0;
+
+    while (true) {
+        double ypos = Enes100.getY();
+        if (ypos == -1) continue;  // invalid reading, skip
+
+        bool conditionMet = false;
+
+        if (comparison == COMP_LESS) {
+            conditionMet = (ypos < targetY);
+        } 
+        else if (comparison == COMP_GREATER) {
+            conditionMet = (ypos > targetY);
+        }
+
+        // --- stable detection ---
+        if (conditionMet) {
+            stableCount++;
+            if (stableCount >= 3) {   // must be stable for ~15ms
+                stopMotors();
+                break;
+            }
+        } else {
+            stableCount = 0;
+        }
+
+        // --- movement ---
+        if (direction == DIR_FORWARD) {
+          moveForward(200);
+        } 
+        else if (direction == DIR_BACKWARD) {
+          moveBackward(200);
+        }
+        else if(direction == DIR_LEFT){
+          moveLeft(200);
+        }
+        else{
+          moveRight(200);
+        }
+
+        delay(5);
+    }
+}
+
+void moveUntilX(double targetX) {
+    int stableCount = 0;
+
+    while (true) {
+        double xpos = Enes100.getX();
+        if (xpos == -1) continue;  // invalid reading, skip
+
+
+        // --- stable detection ---
+        if (xpos > targetX) {
+            stableCount++;
+            if (stableCount >= 3) {   // must be stable for ~15ms
+                stopMotors();
+                break;
+            }
+        } else {
+            stableCount = 0;
+        }
+
+        moveForward(200);
+
+        delay(5);
     }
 }
 
@@ -455,6 +620,20 @@ void moveBackward(int speedVal) {
   rearRightBackward(speedVal);
 }
 
+void moveLeft(int speedVal) {
+  frontLeftBackward(speedVal);
+  frontRightForward(speedVal);
+  rearLeftForward(speedVal);
+  rearRightBackward(speedVal);
+}
+
+void moveRight(int speedVal) {
+  frontLeftForward(speedVal);
+  frontRightBackward(speedVal);
+  rearLeftBackward(speedVal);
+  rearRightForward(speedVal);
+}
+
 void stopMotors() {
   digitalWrite(IN1_1, LOW);
   digitalWrite(IN2_1, LOW);
@@ -544,74 +723,53 @@ void turnLeft(int speedVal) {
 }
 
 void turnToAngle(int speedVal, float targetAngle) {
-  // Normalize target angle to [-PI, PI]
-  if (targetAngle > PI) targetAngle -= 2 * PI;
-  if (targetAngle < -PI) targetAngle += 2 * PI;
 
-  // Get initial angle (retry if invalid) - Good as is
+  // normalize target
+  if (targetAngle > PI) targetAngle -= 2*PI;
+  if (targetAngle < -PI) targetAngle += 2*PI;
+
   float currentAngle = Enes100.getTheta();
   while (currentAngle == -1) {
     currentAngle = Enes100.getTheta();
     delay(5);
   }
 
-  // Safety timer and parameters
-  unsigned long startTime = millis();
-  const unsigned long TIMEOUT = 8000; // stop turning after 8 seconds
-  const float tolerance = 0.03; // radians (~5 degrees)
+  const float tolerance = 0.04;   // ~6 degrees
+  const float Kp = speedVal / PI;
+  const int MIN_SPEED = 62;
 
-  // --- NEW: Proportional Control Constants ---
-  const float Kp = speedVal / PI; // A basic proportionality constant: Full speed at PI error, 0 speed at 0 error
-  const int MIN_SPEED = 50;       // Minimum motor speed to ensure movement
-  // ------------------------------------------
+  int stableCount = 0;
 
-  // Start turning loop
   while (true) {
     currentAngle = Enes100.getTheta();
-    if (currentAngle == -1) {
-      delay(5);
-      continue; // skip invalid readings
-    }
+    if (currentAngle == -1) continue;
 
-    // Compute shortest angular difference (ERROR)
     float error = targetAngle - currentAngle;
-    if (error > PI) error -= 2 * PI;
-    if (error < -PI) error += 2 * PI;
+    if (error > PI) error -= 2*PI;
+    if (error < -PI) error += 2*PI;
 
-    // 1. Check if we've reached the target (stopping condition remains the same)
+    // stable requirement
     if (abs(error) < tolerance) {
-      stopMotors();
-      break;
+      stableCount++;
+      if (stableCount >= 10) { // must be stable for ~20ms
+        stopMotors();
+        break;
+      }
+    } else {
+      stableCount = 0;
     }
 
-    // 2. Safety timeout
-    if (millis() - startTime > TIMEOUT) {
-      stopMotors();
-      break;
-    }
 
-    // --- CRITICAL CHANGE: Proportional Control Implementation ---
-
-    // Calculate the required speed based on the error
-    // The magnitude of the speed is proportional to the magnitude of the error.
     int proportionalSpeed = abs(error) * Kp;
-
-    // Limit the calculated speed between a minimum and the initial speedVal
     int motorSpeed = constrain(proportionalSpeed, MIN_SPEED, speedVal);
 
-    // 3. Continuously choose direction and apply the calculated speed
-    if (error > 0) {
-      // Turn left (positive error) with the proportional speed
-      turnLeft(motorSpeed);
-    } else { // error < 0
-      // Turn right (negative error) with the proportional speed
-      turnRight(motorSpeed);
-    }
+    if (error > 0) turnLeft(motorSpeed);
+    else turnRight(motorSpeed);
 
-    // Delay between readings to prevent over-rapid looping
     delay(5);
   }
 }
+
 
 void moveUp(int speedVal){
   turnToAngle(speedVal, 0);
@@ -623,15 +781,6 @@ void moveDown(int speedVal){
   moveForward(speedVal);
 }
 
-void moveLeft(int speedVal){
-  turnToAngle(speedVal, -PI/2);
-  moveForward(speedVal);
-}
-
-void moveRight(int speedVal){
-  turnToAngle(speedVal, PI/2);
-  moveForward(speedVal);
-}
 
 
 // --- Keyboard Testing Function ---
@@ -676,18 +825,36 @@ void colorSensor(int readings){
 
     if(redFrequency < 400 || blueFrequency < 200 || greenFrequency < 200){
       Serial.println("Pollutants are present");
-     // Enes100.println("Pollutants are present");
-     // Enes100.mission(WATER_TYPE, FRESH_POLLUTED);
+     //  Enes100.println("Pollutants are present");
+      Enes100.mission(WATER_TYPE, FRESH_POLLUTED);
     }
     else{
       Serial.println("Pollutants are not present");
-     // Enes100.println("Pollutants are not present");
-     // Enes100.mission(WATER_TYPE, FRESH_UNPOLLUTED);
+      //Enes100.println("Pollutants are not present");
+      Enes100.mission(WATER_TYPE, FRESH_UNPOLLUTED);
 
     }
 
   }
   
+}
+
+void waterDepth(){
+
+  double waterDepth = 81 - readDistanceMM(trigPinDepth, echoPinDepth);
+  
+  if(waterDepth > 35){
+    Serial.println("Distance = 40 mm");
+    Enes100.mission(DEPTH, 40);
+  }
+  else if(waterDepth > 25 && waterDepth < 35){
+    Serial.println("Distance = 30 mm");
+    Enes100.mission(DEPTH, 30);
+  }
+  else if(waterDepth < 25){
+    Serial.println("Distance = 20 mm");
+    Enes100.mission(DEPTH, 20);
+  }
 }
 
 double readDistanceMM(int trigPin, int echoPin) {
@@ -709,8 +876,7 @@ double readDistanceMM(int trigPin, int echoPin) {
   distanceMM = duration * 0.1715; 
   
   // Added print statement for debugging the raw reading
-  Enes100.println("distancemm");
-  Enes100.println( distanceMM);
+
   //Serial.println(distanceMM);
   
   return distanceMM;
@@ -776,3 +942,4 @@ double averageDistanceReading(int trigPin, int echoPin) {
   
   return (double)average;
 }
+
